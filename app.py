@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+import re
 
 st.set_page_config(page_title="📞 Пропуштени повици", layout="wide")
 st.title("📞 Анализа на пропуштени (неповратени) повици")
@@ -19,16 +21,17 @@ if inbound_file and outbound_file:
     df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name']].drop_duplicates(subset='Original Caller Number')
     outbound_numbers = df_out['Callee Number']
 
-    # Функција за чистење на броеви (само трга 389 или +389)
+    # Подобрена функција за чистење на броеви
     def clean_number(number):
         if pd.isna(number):
             return ""
-        number = str(number).replace(" ", "").replace("-", "").strip()
-        if number.startswith("+389"):
-            number = number[4:]
+        number = str(number)
+        number = re.sub(r"[^\d]", "", number)  # Тргни сè што не е број
+        if number.startswith("00389"):
+            number = number[5:]
         elif number.startswith("389"):
             number = number[3:]
-        return number
+        return number.lstrip("0")  # Опционално: тргни водечка нула
 
     # Чистење на броевите
     df_in['Original Caller Number'] = df_in['Original Caller Number'].apply(clean_number)
@@ -40,9 +43,12 @@ if inbound_file and outbound_file:
     st.subheader(f"📉 Вкупно {len(missed)} пропуштени повици (неповратени):")
     st.dataframe(missed)
 
-    # Export to Excel
-    download = missed.to_excel(index=False, engine='openpyxl')
-    st.download_button("⬇️ Преземи како Excel", download, file_name="missed_calls.xlsx")
+    # Export to Excel (правилно со BytesIO)
+    output = BytesIO()
+    missed.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+
+    st.download_button("⬇️ Преземи како Excel", data=output, file_name="missed_calls.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 else:
     st.info("📂 Прикачи ги двата фајла за да започне анализата.")
