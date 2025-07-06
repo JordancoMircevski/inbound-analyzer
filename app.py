@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import re
 
 st.set_page_config(page_title="📞 Пропуштени повици", layout="wide")
 st.title("📞 Анализа на пропуштени (неповратени) повици")
@@ -29,16 +30,17 @@ if inbound_file and outbound_file:
         df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name']].drop_duplicates(subset='Original Caller Number')
         outbound_numbers = df_out['Callee Number']
 
-        # Функција за чистење на броеви
+        # Напредна функција за чистење на броеви
         def clean_number(number):
             if pd.isna(number):
                 return ""
-            number = str(number).replace(" ", "").replace("-", "").strip()
-            if number.startswith("+389"):
-                number = number[4:]
+            number = str(number)
+            number = re.sub(r"[^\d]", "", number)  # Тргни сè што не е бројка
+            if number.startswith("00389"):
+                number = number[5:]
             elif number.startswith("389"):
                 number = number[3:]
-            return number
+            return number.lstrip("0")  # Отстрани водечки нули (опционално)
 
         # Чистење на броевите
         df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
