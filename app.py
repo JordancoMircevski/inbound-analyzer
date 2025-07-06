@@ -45,4 +45,4 @@ if inbound_file and outbound_file:
     st.download_button("⬇️ Преземи како Excel", download, file_name="missed_calls.xlsx")
 
 else:
-    st.info("📂 Прикачи ги двата фајла за да започне анализата.") ovaa analiza misalm deka e tocna  
+    st.info("📂 Прикачи ги двата фајла за да започне анализата.")
