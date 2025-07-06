@@ -40,7 +40,9 @@ if inbound_file and outbound_file:
                 number = number[5:]
             elif number.startswith("389"):
                 number = number[3:]
-            return number.lstrip("0")  # Отстрани водечки нули (опционално)
+            elif number.startswith("07") and len(number) == 9:
+                return number  # Веќе е чист број
+            return number.lstrip("0")  # Тргни водечки нули ако има
 
         # Чистење на броевите
         df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
