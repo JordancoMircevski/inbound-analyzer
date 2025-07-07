@@ -1,20 +1,19 @@
+
 import streamlit as st
 import pandas as pd
 from io import BytesIO
 import re
 
-# Избор на јазик
-language = st.sidebar.selectbox("Select language / Избери јазик", options=["Македонски", "English"])
-
-# Речник со преводи
+# Јазик
+language = st.sidebar.selectbox("Select language / Избери јазик", ["Македонски", "English"])
 texts = {
     "title": {
         "Македонски": "📞 Анализа на пропуштени повици",
         "English": "📞 Missed Calls Analysis"
     },
     "upload_markdown": {
-        "Македонски": "⬆️ Прикачи ги Excel фајловите за дојдовни и појдовни повици",
-        "English": "⬆️ Upload Excel files for inbound and outbound calls"
+        "Македонски": "⬆️ Прикачи ги трите Excel фајлови (дојдовни, појдовни, Catpro)",
+        "English": "⬆️ Upload all three Excel files (inbound, outbound, Catpro)"
     },
     "upload_inbound": {
         "Македонски": "📥 Inbound фајл (дојдовни повици)",
@@ -24,35 +23,45 @@ texts = {
         "Македонски": "📤 Outbound фајл (појдовни повици)",
         "English": "📤 Outbound file (outgoing calls)"
     },
+    "upload_catpro": {
+        "Македонски": "📊 Catpro извештај",
+        "English": "📊 Catpro report"
+    },
     "missed_calls_subheader": {
         "Македонски": "📉 Вкупно {count} пропуштени повици :",
         "English": "📉 Total {count} missed calls:"
     },
     "download_button": {
-        "Македонски": "⬇️ Преземи како Excel",
-        "English": "⬇️ Download as Excel"
+        "Македонски": "⬇️ Преземи финална табела",
+        "English": "⬇️ Download final table"
     },
     "info_upload_files": {
-        "Македонски": "📂 Прикачи ги двата фајла за да започне анализата.",
-        "English": "📂 Please upload both files to start analysis."
+        "Македонски": "📂 Прикачи ги сите три фајла за да започне анализата.",
+        "English": "📂 Please upload all three files to start analysis."
     }
 }
 
+# UI
 st.set_page_config(page_title=texts["title"][language], layout="wide")
 st.title(texts["title"][language])
 st.markdown(texts["upload_markdown"][language])
 
-# Sidebar – upload на фајлови
+# Upload на 3 фајла
 inbound_file = st.sidebar.file_uploader(texts["upload_inbound"][language], type=["xlsx"])
 outbound_file = st.sidebar.file_uploader(texts["upload_outbound"][language], type=["xlsx"])
+catpro_file = st.sidebar.file_uploader(texts["upload_catpro"][language], type=["xlsx"])
 
-if inbound_file and outbound_file:
+if inbound_file and outbound_file and catpro_file:
+    # Читање
     df_in = pd.read_excel(inbound_file)
     df_out = pd.read_excel(outbound_file)
+    df_cat = pd.read_excel(catpro_file, header=1)  # важно!
 
+    # Филтрирање Inbound
     df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name']].drop_duplicates(subset='Original Caller Number')
     outbound_numbers = df_out['Callee Number']
 
+    # Чистење броеви
     def clean_number(number):
         if pd.isna(number):
             return ""
@@ -64,24 +73,52 @@ if inbound_file and outbound_file:
             number = number[3:]
         return number.lstrip("0")
 
-    df_in['Original Caller Number'] = df_in['Original Caller Number'].apply(clean_number)
-    outbound_numbers_cleaned = outbound_numbers.apply(clean_number)
+    df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
+    outbound_cleaned = outbound_numbers.apply(clean_number)
+    df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
 
-    missed = df_in[~df_in['Original Caller Number'].isin(outbound_numbers_cleaned)]
+    # Пропуштени повици
+    missed = df_in[~df_in['Cleaned Number'].isin(outbound_cleaned)]
 
-    st.subheader(texts["missed_calls_subheader"][language].format(count=len(missed)))
-    st.dataframe(missed)
+    # Merge со Catpro
+    final = pd.merge(
+        missed,
+        df_cat[['Cleaned GSM', 'Agent of insertion', 'Answer']],
+        left_on='Cleaned Number',
+        right_on='Cleaned GSM',
+        how='left'
+    )
 
+    # Крајна табела
+    final_table = final[[
+        'Original Caller Number',
+        'Start Time',
+        'Source Trunk Name',
+        'GSM',
+        'Agent of insertion',
+        'Answer'
+    ]]
+    final_table.rename(columns={
+        'Original Caller Number': 'Phone',
+        'Start Time': 'Date',
+        'Source Trunk Name': 'Trunk',
+        'Agent of insertion': 'Agent',
+        'Answer': 'Last contact'
+    }, inplace=True)
+
+    st.subheader(texts["missed_calls_subheader"][language].format(count=len(final_table)))
+    st.dataframe(final_table)
+
+    # Export
     output = BytesIO()
-    missed.to_excel(output, index=False, engine='openpyxl')
+    final_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
 
     st.download_button(
-        texts["download_button"][language],
+        label=texts["download_button"][language],
         data=output,
-        file_name="missed_calls.xlsx",
+        file_name="missed_calls_final.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 else:
     st.info(texts["info_upload_files"][language])
