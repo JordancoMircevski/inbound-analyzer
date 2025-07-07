@@ -78,12 +78,19 @@ if inbound_file and outbound_file and catpro_file:
         lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
     )
 
-    # 6. Финална табела
+    # 6. Мапирање број → агент
+    gsm_to_agent = df_cat.set_index('Cleaned GSM')['Created By'].to_dict()
+    missed['Agent'] = missed['Cleaned Number'].apply(
+        lambda num: gsm_to_agent.get(num, "") if num in valid_gsm_set else ""
+    )
+
+    # 7. Финална табела
     final_table = missed[[
         'Original Caller Number',
         'Start Time',
         'Source Trunk Name',
-        'Status'
+        'Status',
+        'Agent'
     ]].rename(columns={
         'Original Caller Number': 'Phone',
         'Start Time': 'Date',
