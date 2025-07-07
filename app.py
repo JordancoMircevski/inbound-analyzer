@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -52,12 +51,12 @@ outbound_file = st.sidebar.file_uploader(texts["upload_outbound"][language], typ
 catpro_file = st.sidebar.file_uploader(texts["upload_catpro"][language], type=["xlsx"])
 
 if inbound_file and outbound_file and catpro_file:
-    # Читање
+    # Читање на податоци
     df_in = pd.read_excel(inbound_file)
     df_out = pd.read_excel(outbound_file)
-    df_cat = pd.read_excel(catpro_file, header=1)  # важно!
+    df_cat = pd.read_excel(catpro_file, header=1)  # Вистинскиот хедер е на втората редица
 
-    # Филтрирање Inbound
+    # Избор на колони и бришење дупликати
     df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name']].drop_duplicates(subset='Original Caller Number')
     outbound_numbers = df_out['Callee Number']
 
@@ -83,13 +82,13 @@ if inbound_file and outbound_file and catpro_file:
     # Merge со Catpro
     final = pd.merge(
         missed,
-        df_cat[['Cleaned GSM', 'Agent of insertion', 'Answer']],
+        df_cat[['Cleaned GSM', 'Agent of insertion', 'Answer', 'GSM']],
         left_on='Cleaned Number',
         right_on='Cleaned GSM',
         how='left'
     )
 
-    # Крајна табела
+    # Финална табела
     final_table = final[[
         'Original Caller Number',
         'Start Time',
@@ -98,6 +97,7 @@ if inbound_file and outbound_file and catpro_file:
         'Agent of insertion',
         'Answer'
     ]]
+
     final_table.rename(columns={
         'Original Caller Number': 'Phone',
         'Start Time': 'Date',
@@ -106,10 +106,11 @@ if inbound_file and outbound_file and catpro_file:
         'Answer': 'Last contact'
     }, inplace=True)
 
+    # Приказ
     st.subheader(texts["missed_calls_subheader"][language].format(count=len(final_table)))
     st.dataframe(final_table)
 
-    # Export
+    # Export to Excel
     output = BytesIO()
     final_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
