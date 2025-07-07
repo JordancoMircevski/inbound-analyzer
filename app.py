@@ -77,11 +77,10 @@ if inbound_file and outbound_file and catpro_file:
         lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
     )
 
-    # 6. Финална табела со и оригинален и чистен број
+    # 6. Финална табела - само чист број
     final_table = missed[[ 
-        'Original Caller Number', 'Cleaned Number', 'Start Time', 'Source Trunk Name', 'Status' 
+        'Cleaned Number', 'Start Time', 'Source Trunk Name', 'Status' 
     ]].rename(columns={
-        'Original Caller Number': 'Original Phone',
         'Cleaned Number': 'Phone',
         'Start Time': 'Date',
         'Source Trunk Name': 'Trunk'
