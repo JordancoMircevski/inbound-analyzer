@@ -38,12 +38,11 @@ inbound_file = st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"
 outbound_file = st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"])
 catpro_file = st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"])
 
-# Функција за чистење броеви
+# ✅ Поправена функција за чистење броеви
 def clean_number(number):
     if pd.isna(number):
         return ""
-    number = str(number)
-    number = re.sub(r"[^\d]", "", number)
+    number = re.sub(r"[^\d]", "", str(number))  # Отстрани нецифрени
     if number.startswith("00389"):
         number = number[5:]
     elif number.startswith("389"):
@@ -66,25 +65,20 @@ if inbound_file and outbound_file and catpro_file:
     df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
 
     # 3. Чистење Catpro (GSM)
-    df_cat = df_cat[df_cat['GSM'].notna()]  # Отстрани редови без GSM
+    df_cat = df_cat[df_cat['GSM'].notna()]  # Само редови со валиден GSM
     df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
     valid_gsm_set = set(df_cat['Cleaned GSM'].dropna())
 
-    # 4. Пропуштени повици = inbound броеви што ги нема во outbound
+    # 4. Пропуштени повици = inbound броеви што не се во outbound
     missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
 
-    # 5. Проверка дали бројот е внесен во систем (дали постои во Catpro)
+    # 5. Проверка дали бројот е внесен во систем (Catpro)
     missed['Status'] = missed['Cleaned Number'].apply(
         lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
     )
 
     # 6. Финална табела
-    final_table = missed[[
-        'Original Caller Number',
-        'Start Time',
-        'Source Trunk Name',
-        'Status'
-    ]].rename(columns={
+    final_table = missed[[ 'Original Caller Number', 'Start Time', 'Source Trunk Name', 'Status' ]].rename(columns={
         'Original Caller Number': 'Phone',
         'Start Time': 'Date',
         'Source Trunk Name': 'Trunk'
