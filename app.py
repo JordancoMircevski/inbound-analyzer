@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from io import BytesIO
 
-# UI јазик
+# Јазик
 language = st.sidebar.selectbox("Јазик / Language", ["Македонски", "English"])
 
 texts = {
@@ -33,11 +33,12 @@ st.set_page_config(page_title=texts["title"][language], layout="wide")
 st.title(texts["title"][language])
 st.markdown(texts["upload"][language])
 
+# Upload на фајловите
 inbound_file = st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"])
 outbound_file = st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"])
 catpro_file = st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"])
 
-# Чистење број
+# Функција за чистење броеви
 def clean_number(number):
     if pd.isna(number):
         return ""
@@ -52,35 +53,46 @@ def clean_number(number):
     return number
 
 if inbound_file and outbound_file and catpro_file:
+    # Читање на фајлови
     df_in = pd.read_excel(inbound_file)
     df_out = pd.read_excel(outbound_file)
     df_cat = pd.read_excel(catpro_file, header=1)
 
-    # Чистење броеви
+    # 1. Чистење и групирање на inbound
     df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
+    df_in = df_in.sort_values('Start Time').drop_duplicates('Cleaned Number', keep='last')
+
+    # 2. Outbound
     df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
+
+    # 3. Catpro
     df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
 
-    # Пропуштени броеви
+    # 4. Пропуштени повици = inbound што ги нема во outbound
     missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
 
-    # Проверка дали е внесен
+    # 5. Проверка дали е внесен во систем (дали го има во Catpro)
     missed['Status'] = missed['Cleaned Number'].apply(
         lambda num: "✅ Внесен во систем" if num in df_cat['Cleaned GSM'].values else "❌ НЕ е внесен"
     )
 
     # Финална табела
-    final_table = missed[['Original Caller Number', 'Start Time', 'Source Trunk Name', 'Status']].rename(columns={
+    final_table = missed[[
+        'Original Caller Number',
+        'Start Time',
+        'Source Trunk Name',
+        'Status'
+    ]].rename(columns={
         'Original Caller Number': 'Phone',
         'Start Time': 'Date',
         'Source Trunk Name': 'Trunk'
     })
 
-    # Приказ
+    # Приказ на табелата
     st.subheader(texts["count"][language].format(count=len(final_table)))
     st.dataframe(final_table)
 
-    # Преземање
+    # Export во Excel
     output = BytesIO()
     final_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
