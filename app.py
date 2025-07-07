@@ -40,22 +40,21 @@ texts = {
     }
 }
 
-# UI
 st.set_page_config(page_title=texts["title"][language], layout="wide")
 st.title(texts["title"][language])
 st.markdown(texts["upload_markdown"][language])
 
-# Upload на 3 фајла
+# Upload
 inbound_file = st.sidebar.file_uploader(texts["upload_inbound"][language], type=["xlsx"])
 outbound_file = st.sidebar.file_uploader(texts["upload_outbound"][language], type=["xlsx"])
 catpro_file = st.sidebar.file_uploader(texts["upload_catpro"][language], type=["xlsx"])
 
-# Ако сите фајлови се прикачени
 if inbound_file and outbound_file and catpro_file:
-    # Читање
+
+    # Читање на Excel-ите
     df_in = pd.read_excel(inbound_file)
     df_out = pd.read_excel(outbound_file)
-    df_cat = pd.read_excel(catpro_file, header=1)  # Втор ред е хедер
+    df_cat = pd.read_excel(catpro_file, header=1)
 
     # Чистење броеви
     def clean_number(number):
@@ -67,20 +66,24 @@ if inbound_file and outbound_file and catpro_file:
             number = number[5:]
         elif number.startswith("389"):
             number = number[3:]
-        return number[-7:]  # земи ги последните 7 цифри за сигурност
+        elif number.startswith("0"):
+            number = number[1:]
+        return number
 
-    # Подготовка на inbound и outbound
-    df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name']].drop_duplicates(subset='Original Caller Number')
+    # Inbound
     df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
-    df_out['Cleaned Outbound'] = df_out['Callee Number'].apply(clean_number)
+    df_in = df_in[['Original Caller Number', 'Start Time', 'Source Trunk Name', 'Cleaned Number']].drop_duplicates(subset='Cleaned Number')
+
+    # Outbound
+    df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
 
     # Catpro
     df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
 
-    # Пропуштени: броеви што ги има во inbound, а не во outbound
-    missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Outbound'])]
+    # Филтрирање: повици што немаат повратен појдовен
+    missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])]
 
-    # Merge со Catpro по Cleaned Number
+    # Спојување со Catpro
     final = pd.merge(
         missed,
         df_cat[['Cleaned GSM', 'Agent of insertion', 'Answer', 'GSM']],
@@ -99,23 +102,19 @@ if inbound_file and outbound_file and catpro_file:
         'Answer'
     ]]
 
-    final_table.rename(columns={
+    final_table = final_table.rename(columns={
         'Original Caller Number': 'Phone',
         'Start Time': 'Date',
         'Source Trunk Name': 'Trunk',
         'Agent of insertion': 'Agent',
         'Answer': 'Last contact'
-    }, inplace=True)
+    })
 
-    # ✅ Debug preview ако има празни полиња
-    st.write("⬇️ Првите 10 реда од финалната табела:")
-    st.dataframe(final_table.head(10))
-
-    # 📊 Приказ
+    # Приказ
     st.subheader(texts["missed_calls_subheader"][language].format(count=len(final_table)))
     st.dataframe(final_table)
 
-    # 📥 Преземање како Excel
+    # Export
     output = BytesIO()
     final_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
@@ -126,12 +125,6 @@ if inbound_file and outbound_file and catpro_file:
         file_name="missed_calls_final.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-    # Debug - споредба на броеви ако ништо не се поклопува
-    if final_table['Agent'].isna().all():
-        st.warning("⚠️ Ниеден број не се совпадна со Catpro податоците. Провери дали бројките се во ист формат.")
-        st.write("Пример Cleaned Number од missed:", missed['Cleaned Number'].unique()[:10])
-        st.write("Пример Cleaned GSM од Catpro:", df_cat['Cleaned GSM'].unique()[:10])
 
 else:
     st.info(texts["info_upload_files"][language])
