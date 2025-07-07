@@ -8,7 +8,7 @@ language = st.sidebar.selectbox("Јазик / Language", ["Македонски"
 
 texts = {
     "title": {
-        "Македонски": "📞 Проверка на внесени пропуштени повици",
+        "Македонски": "📞 Проверка на пропуштени повици",
         "English": "📞 Missed Calls System Check"
     },
     "upload": {
@@ -104,15 +104,18 @@ if inbound_file and outbound_file and catpro_file:
         'Source Trunk Name': 'Trunk'
     })
 
-    # 8. Филтер: прикажи само НЕ внесени
+    # 8. Додај национален код 389 назад пред бројот за појасна презентација
+    final_table['Phone'] = final_table['Phone'].apply(lambda x: '389' + str(x) if not str(x).startswith('389') else str(x))
+
+    # 9. Филтер: прикажи само НЕ внесени
     show_only_missing = st.checkbox(texts["filter_checkbox"][language])
     filtered_table = final_table[final_table['Status'] == "❌ НЕ е внесен"] if show_only_missing else final_table
 
-    # 9. Приказ во апликацијата
+    # 10. Приказ во апликацијата
     st.subheader(texts["count"][language].format(count=len(filtered_table)))
     st.dataframe(filtered_table)
 
-    # 10. Преземи како Excel
+    # 11. Преземи како Excel
     output = BytesIO()
     filtered_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
