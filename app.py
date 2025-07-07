@@ -37,12 +37,7 @@ st.set_page_config(page_title=texts["title"][language], layout="wide")
 st.title(texts["title"][language])
 st.markdown(texts["upload"][language])
 
-# Upload фајлови
-inbound_file = st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"])
-outbound_file = st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"])
-catpro_file = st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"])
-
-# Функција за чистење броеви
+# Функција за чистење броеви без префикс 389 и без водечко 0
 def clean_number(number):
     if pd.isna(number):
         return ""
@@ -56,76 +51,74 @@ def clean_number(number):
         number = number[1:]
     return number
 
-if inbound_file and outbound_file and catpro_file:
-    # Вчитување на фајлови
-    df_in = pd.read_excel(inbound_file)
-    df_out = pd.read_excel(outbound_file)
-    df_cat = pd.read_excel(catpro_file, header=1)
+if st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"]) and \
+   st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"]) and \
+   st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"]):
 
-    # 1. Чистење inbound броеви и групирање по последен повик
-    df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
-    df_in = df_in.sort_values('Start Time').drop_duplicates('Cleaned Number', keep='last')
+    # Ги земаме фајловите од upload (повторно за да ги користиме подоцна)
+    inbound_file = st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"])
+    outbound_file = st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"])
+    catpro_file = st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"])
 
-    # 2. Чистење outbound броеви
-    df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
+    if inbound_file and outbound_file and catpro_file:
+        df_in = pd.read_excel(inbound_file)
+        df_out = pd.read_excel(outbound_file)
+        df_cat = pd.read_excel(catpro_file, header=1)
 
-    # 3. Чистење Catpro (GSM)
-    df_cat = df_cat[df_cat['GSM'].notna()]
-    df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
-    valid_gsm_set = set(df_cat['Cleaned GSM'].dropna())
+        # Чистење броеви
+        df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
+        df_in = df_in.sort_values('Start Time').drop_duplicates('Cleaned Number', keep='last')
 
-    # 4. Мапирање број → агент
-    if 'Agent of insertion' in df_cat.columns:
-        gsm_to_agent = df_cat.set_index('Cleaned GSM')['Agent of insertion'].to_dict()
-    else:
-        gsm_to_agent = {}
+        df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
 
-    # 5. Пропуштени повици = inbound броеви што ги нема во outbound
-    missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
+        df_cat = df_cat[df_cat['GSM'].notna()]
+        df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
+        valid_gsm_set = set(df_cat['Cleaned GSM'].dropna())
 
-    # 6. Проверка дали бројот е внесен и кој агент го внел
-    missed['Status'] = missed['Cleaned Number'].apply(
-        lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
-    )
-    missed['Agent'] = missed['Cleaned Number'].apply(
-        lambda num: gsm_to_agent.get(num, "") if num in valid_gsm_set else ""
-    )
+        if 'Agent of insertion' in df_cat.columns:
+            gsm_to_agent = df_cat.set_index('Cleaned GSM')['Agent of insertion'].to_dict()
+        else:
+            gsm_to_agent = {}
 
-    # 7. Финална табела
-    final_table = missed[[
-        'Original Caller Number',
-        'Start Time',
-        'Source Trunk Name',
-        'Status',
-        'Agent'
-    ]].rename(columns={
-        'Original Caller Number': 'Phone',
-        'Start Time': 'Date',
-        'Source Trunk Name': 'Trunk'
-    })
+        missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
 
-    # 8. Додај национален код 389 назад пред бројот за појасна презентација
-    final_table['Phone'] = final_table['Phone'].apply(lambda x: '389' + str(x) if not str(x).startswith('389') else str(x))
+        missed['Status'] = missed['Cleaned Number'].apply(
+            lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
+        )
+        missed['Agent'] = missed['Cleaned Number'].apply(
+            lambda num: gsm_to_agent.get(num, "") if num in valid_gsm_set else ""
+        )
 
-    # 9. Филтер: прикажи само НЕ внесени
-    show_only_missing = st.checkbox(texts["filter_checkbox"][language])
-    filtered_table = final_table[final_table['Status'] == "❌ НЕ е внесен"] if show_only_missing else final_table
+        final_table = missed[[
+            'Cleaned Number',
+            'Start Time',
+            'Source Trunk Name',
+            'Status',
+            'Agent'
+        ]].rename(columns={
+            'Cleaned Number': 'Phone',
+            'Start Time': 'Date',
+            'Source Trunk Name': 'Trunk'
+        })
 
-    # 10. Приказ во апликацијата
-    st.subheader(texts["count"][language].format(count=len(filtered_table)))
-    st.dataframe(filtered_table)
+        # Прикажи броеви БЕЗ 0 или 389 - чисти броеви
+        # (веќе се чистат во clean_number)
 
-    # 11. Преземи како Excel
-    output = BytesIO()
-    filtered_table.to_excel(output, index=False, engine='openpyxl')
-    output.seek(0)
+        show_only_missing = st.checkbox(texts["filter_checkbox"][language])
+        filtered_table = final_table[final_table['Status'] == "❌ НЕ е внесен"] if show_only_missing else final_table
 
-    st.download_button(
-        label=texts["download"][language],
-        data=output,
-        file_name="missed_calls_status.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        st.subheader(texts["count"][language].format(count=len(filtered_table)))
+        st.dataframe(filtered_table)
 
+        output = BytesIO()
+        filtered_table.to_excel(output, index=False, engine='openpyxl')
+        output.seek(0)
+
+        st.download_button(
+            label=texts["download"][language],
+            data=output,
+            file_name="missed_calls_status.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 else:
     st.info(texts["info"][language])
