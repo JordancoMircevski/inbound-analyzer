@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from io import BytesIO
 
-# Јазик
+# UI јазик
 language = st.sidebar.selectbox("Јазик / Language", ["Македонски", "English"])
 
 texts = {
@@ -33,7 +33,7 @@ st.set_page_config(page_title=texts["title"][language], layout="wide")
 st.title(texts["title"][language])
 st.markdown(texts["upload"][language])
 
-# Upload на фајловите
+# Upload фајлови
 inbound_file = st.sidebar.file_uploader(texts["inbound"][language], type=["xlsx"])
 outbound_file = st.sidebar.file_uploader(texts["outbound"][language], type=["xlsx"])
 catpro_file = st.sidebar.file_uploader(texts["catpro"][language], type=["xlsx"])
@@ -53,30 +53,32 @@ def clean_number(number):
     return number
 
 if inbound_file and outbound_file and catpro_file:
-    # Читање на фајлови
+    # Вчитување на фајлови
     df_in = pd.read_excel(inbound_file)
     df_out = pd.read_excel(outbound_file)
     df_cat = pd.read_excel(catpro_file, header=1)
 
-    # 1. Чистење и групирање на inbound
+    # 1. Чистење inbound броеви и групирање по последен повик
     df_in['Cleaned Number'] = df_in['Original Caller Number'].apply(clean_number)
     df_in = df_in.sort_values('Start Time').drop_duplicates('Cleaned Number', keep='last')
 
-    # 2. Outbound
+    # 2. Чистење outbound броеви
     df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
 
-    # 3. Catpro
+    # 3. Чистење Catpro (GSM)
+    df_cat = df_cat[df_cat['GSM'].notna()]  # Отстрани редови без GSM
     df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
+    valid_gsm_set = set(df_cat['Cleaned GSM'].dropna())
 
-    # 4. Пропуштени повици = inbound што ги нема во outbound
+    # 4. Пропуштени повици = inbound броеви што ги нема во outbound
     missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
 
-    # 5. Проверка дали е внесен во систем (дали го има во Catpro)
+    # 5. Проверка дали бројот е внесен во систем (дали постои во Catpro)
     missed['Status'] = missed['Cleaned Number'].apply(
-        lambda num: "✅ Внесен во систем" if num in df_cat['Cleaned GSM'].values else "❌ НЕ е внесен"
+        lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
     )
 
-    # Финална табела
+    # 6. Финална табела
     final_table = missed[[
         'Original Caller Number',
         'Start Time',
@@ -88,7 +90,7 @@ if inbound_file and outbound_file and catpro_file:
         'Source Trunk Name': 'Trunk'
     })
 
-    # Приказ на табелата
+    # Приказ во Streamlit
     st.subheader(texts["count"][language].format(count=len(final_table)))
     st.dataframe(final_table)
 
