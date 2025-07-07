@@ -27,9 +27,9 @@ texts = {
         "Македонски": "📂 Прикачи ги сите три фајла за да започне анализата.",
         "English": "📂 Please upload all three files to start the analysis."
     },
-    "filter_checkbox": {
-        "Македонски": "🔍 Прикажи само броеви што НЕ се внесени",
-        "English": "🔍 Show only numbers that are NOT entered"
+    "test_number": {
+        "Македонски": "Тестиран број за внесен статус:",
+        "English": "Test number for insertion status:"
     }
 }
 
@@ -69,21 +69,17 @@ if inbound_file and outbound_file and catpro_file:
     # 2. Чистење outbound броеви
     df_out['Cleaned Number'] = df_out['Callee Number'].apply(clean_number)
 
-    # 3. Чистење Catpro (GSM)
-    df_cat = df_cat[df_cat['GSM'].notna()]
+    # 3. Чистење Catpro (GSM и агент)
+    df_cat = df_cat[df_cat['GSM'].notna()]  # Отстрани редови без GSM
     df_cat['Cleaned GSM'] = df_cat['GSM'].apply(clean_number)
     valid_gsm_set = set(df_cat['Cleaned GSM'].dropna())
 
-    # 4. Мапирање број → агент
-    if 'Agent of insertion' in df_cat.columns:
-        gsm_to_agent = df_cat.set_index('Cleaned GSM')['Agent of insertion'].to_dict()
-    else:
-        gsm_to_agent = {}
+    gsm_to_agent = df_cat.set_index('Cleaned GSM')['Agent of insertion'].to_dict()
 
-    # 5. Пропуштени повици = inbound броеви што ги нема во outbound
+    # 4. Пропуштени повици = inbound броеви што ги нема во outbound
     missed = df_in[~df_in['Cleaned Number'].isin(df_out['Cleaned Number'])].copy()
 
-    # 6. Проверка дали бројот е внесен и кој агент го внел
+    # 5. Проверка дали бројот е внесен во систем (дали постои во Catpro)
     missed['Status'] = missed['Cleaned Number'].apply(
         lambda num: "✅ Внесен во систем" if num in valid_gsm_set else "❌ НЕ е внесен"
     )
@@ -91,7 +87,7 @@ if inbound_file and outbound_file and catpro_file:
         lambda num: gsm_to_agent.get(num, "") if num in valid_gsm_set else ""
     )
 
-    # 7. Финална табела
+    # 6. Финална табела
     final_table = missed[[
         'Original Caller Number',
         'Start Time',
@@ -104,17 +100,13 @@ if inbound_file and outbound_file and catpro_file:
         'Source Trunk Name': 'Trunk'
     })
 
-    # 8. Филтер: прикажи само НЕ внесени
-    show_only_missing = st.checkbox(texts["filter_checkbox"][language])
-    filtered_table = final_table[final_table['Status'] == "❌ НЕ е внесен"] if show_only_missing else final_table
+    # Приказ во Streamlit
+    st.subheader(texts["count"][language].format(count=len(final_table)))
+    st.dataframe(final_table)
 
-    # 9. Приказ во апликацијата
-    st.subheader(texts["count"][language].format(count=len(filtered_table)))
-    st.dataframe(filtered_table)
-
-    # 10. Преземи како Excel
+    # Export во Excel
     output = BytesIO()
-    filtered_table.to_excel(output, index=False, engine='openpyxl')
+    final_table.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
 
     st.download_button(
@@ -123,6 +115,17 @@ if inbound_file and outbound_file and catpro_file:
         file_name="missed_calls_status.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    # --- Тестирање на фиксен број за внесен статус ---
+    test_number_raw = st.text_input(texts["test_number"][language], value="070123456")
+    test_number = clean_number(test_number_raw)
+
+    if st.button("Провери статус"):
+        if test_number in valid_gsm_set:
+            agent_name = gsm_to_agent.get(test_number, "Агентот не е пронајден")
+            st.success(f"Бројот {test_number_raw} Е ВНЕСЕН во систем.\nАгент: {agent_name}")
+        else:
+            st.error(f"Бројот {test_number_raw} НЕ Е внесен во систем.")
 
 else:
     st.info(texts["info"][language])
