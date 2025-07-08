@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
 
 st.set_page_config(page_title="📞 Анализа на пропуштени повици", layout="wide")
 st.title("📞 Анализа на пропуштениповици")
@@ -40,9 +41,19 @@ if inbound_file and outbound_file:
     st.subheader(f"📉 Вкупно {len(missed)} пропуштени повици (неповикани назад):")
     st.dataframe(missed)
 
-    # Преземи Excel
-    download = missed.to_excel(index=False, engine='openpyxl')
-    st.download_button("⬇️ Преземи Excel со пропуштени повици", download, file_name="missed_calls.xlsx")
+    # Подготви Excel за преземање
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        missed.to_excel(writer, index=False)
+        writer.save()
+    buffer.seek(0)
+
+    st.download_button(
+        label="⬇️ Преземи Excel со пропуштени повици",
+        data=buffer,
+        file_name="missed_calls.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 else:
     st.info("📂 Прикачи ги двата фајла за да започне анализата.")
