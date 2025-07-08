@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="📞 ", layout="wide")
+st.set_page_config(page_title="📞 Анализа на пропуштени повици", layout="wide")
 st.title("📞 Анализа на пропуштени (неповратени) повици")
 
 st.markdown("⬆️ Прикачи два Excel фајла: inbound (дојдовни) и outbound (појдовни)")
